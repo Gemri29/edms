@@ -1,0 +1,162 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  ARCHIVE
+  RESTORE
+  DELETE
+}
+
+enum AuditEntity {
+  EMPLOYEE
+  USER
+}
+
+// ─── Users ────────────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String    @map("password_hash")
+  fullName      String    @map("full_name")
+  role          Role      @default(ADMIN)
+  isActive      Boolean   @default(true) @map("is_active")
+  mustChangePw  Boolean   @default(true) @map("must_change_pw")
+  lastLoginAt   DateTime? @map("last_login_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  createdEmployees  Employee[]  @relation("CreatedBy")
+  updatedEmployees  Employee[]  @relation("UpdatedBy")
+  auditLogsChanged  AuditLog[]  @relation("ChangedBy")
+  auditLogsAsUser   AuditLog[]  @relation("AuditedUser")
+  tokenBlocklist    TokenBlocklist[]
+
+  @@map("users")
+}
+
+// ─── Token Blocklist (for explicit logout / revocation) ───────────────────────
+
+model TokenBlocklist {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([token])
+  @@index([expiresAt])
+  @@map("token_blocklist")
+}
+
+// ─── Employees ────────────────────────────────────────────────────────────────
+
+model Employee {
+  id             String         @id @default(uuid())
+  employeeNumber String         @unique @map("employee_number")
+  designation    String
+  lastName       String         @map("last_name")
+  firstName      String         @map("first_name")
+  gender         Gender
+  birthdate      DateTime
+  mobileNo       String         @map("mobile_no")
+  email          String
+
+  // Document fields (encrypted at rest via pgcrypto in production)
+  passportNo         String?   @map("passport_no")
+  passportExpiry     DateTime? @map("passport_expiry")
+  laborCardNo        String?   @map("labor_card_no")
+  laborCardExpiry    DateTime? @map("labor_card_expiry")
+  eidNo              String?   @map("eid_no")
+  eidExpiry          DateTime? @map("eid_expiry")
+  uidNo              String?   @map("uid_no")
+  fileNo             String?   @map("file_no")
+  visaExpiry         DateTime? @map("visa_expiry")
+
+  status        EmployeeStatus @default(ACTIVE)
+
+  // Audit timestamps
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  archivedAt DateTime? @map("archived_at")
+
+  // Audit relations
+  createdById String? @map("created_by_id")
+  updatedById String? @map("updated_by_id")
+
+  createdBy User? @relation("CreatedBy", fields: [createdById], references: [id])
+  updatedBy User? @relation("UpdatedBy", fields: [updatedById], references: [id])
+
+  auditLogs          AuditLog[]
+  notificationLogs   NotificationLog[]
+
+  @@index([status])
+  @@index([lastName, firstName])
+  @@index([employeeNumber])
+  @@map("employees")
+}
+
+// ─── Audit Logs ───────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id            String      @id @default(uuid())
+  entityType    AuditEntity @map("entity_type")
+  employeeId    String?     @map("employee_id")
+  userId        String?     @map("user_id")
+  action        AuditAction
+  changedById   String      @map("changed_by_id")
+  changedAt     DateTime    @default(now()) @map("changed_at")
+  previousValue Json?       @map("previous_value")
+  newValue      Json?       @map("new_value")
+
+  changedBy User      @relation("ChangedBy", fields: [changedById], references: [id])
+  employee  Employee? @relation(fields: [employeeId], references: [id])
+  user      User?     @relation("AuditedUser", fields: [userId], references: [id])
+
+  @@index([employeeId])
+  @@index([userId])
+  @@index([changedAt])
+  @@map("audit_logs")
+}
+
+// ─── Notification Logs (prevents duplicate daily alerts) ─────────────────────
+
+model NotificationLog {
+  id             String   @id @default(uuid())
+  employeeId     String   @map("employee_id")
+  documentField  String   @map("document_field")
+  lastNotifiedAt DateTime @map("last_notified_at")
+
+  employee Employee @relation(fields: [employeeId], references: [id])
+
+  @@unique([employeeId, documentField])
+  @@map("notification_logs")
+}
