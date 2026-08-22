@@ -83,6 +83,7 @@ model Employee {
   id             String         @id @default(uuid())
   employeeNumber String         @unique @map("employee_number")
   designation    String
+  designationEid String?        @map("designation_eid")   // ← NEW
   lastName       String         @map("last_name")
   firstName      String         @map("first_name")
   gender         Gender
@@ -90,7 +91,7 @@ model Employee {
   mobileNo       String         @map("mobile_no")
   email          String
 
-  // Document fields (encrypted at rest via pgcrypto in production)
+  // Document fields
   passportNo         String?   @map("passport_no")
   passportExpiry     DateTime? @map("passport_expiry")
   laborCardNo        String?   @map("labor_card_no")
@@ -101,14 +102,18 @@ model Employee {
   fileNo             String?   @map("file_no")
   visaExpiry         DateTime? @map("visa_expiry")
 
+  // Salary fields (stored in AED, whole numbers) ← NEW
+  basicSalary       Decimal?  @map("basic_salary")    @db.Decimal(12, 2)
+  housingSalary     Decimal?  @map("housing_salary")  @db.Decimal(12, 2)
+  transpoAllowance  Decimal?  @map("transpo_allowance") @db.Decimal(12, 2)
+  totalSalary       Decimal?  @map("total_salary")    @db.Decimal(12, 2)
+
   status        EmployeeStatus @default(ACTIVE)
 
-  // Audit timestamps
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
   archivedAt DateTime? @map("archived_at")
 
-  // Audit relations
   createdById String? @map("created_by_id")
   updatedById String? @map("updated_by_id")
 

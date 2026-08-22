@@ -2,7 +2,6 @@ import { z } from 'zod'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-// Accept DD/MM/YYYY string from frontend, convert to Date
 const dateString = z
   .string()
   .regex(/^\d{2}\/\d{2}\/\d{4}$/, 'Date must be in DD/MM/YYYY format')
@@ -21,6 +20,14 @@ const optionalDateString = z
   .optional()
   .nullable()
 
+// Salary: max 10 digits, whole numbers only, stored as Decimal in DB
+const optionalSalary = z
+  .string()
+  .regex(/^\d{0,10}$/, 'Max 10 digits, whole numbers only')
+  .transform((v) => (v === '' || v === undefined ? null : parseFloat(v)))
+  .optional()
+  .nullable()
+
 // ─── Auth Schemas ─────────────────────────────────────────────────────────────
 
 export const loginSchema = z.object({
@@ -33,9 +40,9 @@ export const changePasswordSchema = z.object({
   newPassword: z
     .string()
     .min(8, 'Password must be at least 8 characters')
-    .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
-    .regex(/[0-9]/, 'Password must contain at least one number')
-    .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
+    .regex(/[A-Z]/, 'Must contain at least one uppercase letter')
+    .regex(/[0-9]/, 'Must contain at least one number')
+    .regex(/[^A-Za-z0-9]/, 'Must contain at least one special character'),
 })
 
 // ─── User Schemas ─────────────────────────────────────────────────────────────
@@ -63,6 +70,7 @@ export const updateUserSchema = z.object({
 export const createEmployeeSchema = z.object({
   employeeNumber: z.string().min(1, 'Employee number is required'),
   designation: z.string().min(1, 'Designation is required'),
+  designationEid: z.string().optional().nullable(),              // ← NEW
   lastName: z.string().min(1, 'Last name is required'),
   firstName: z.string().min(1, 'First name is required'),
   gender: z.enum(['MALE', 'FEMALE', 'OTHER']),
@@ -73,7 +81,7 @@ export const createEmployeeSchema = z.object({
     .regex(/^\+?[0-9\s\-()]+$/, 'Invalid mobile number format'),
   email: z.string().email('Invalid email address'),
 
-  // Optional document fields
+  // Document fields
   passportNo: z.string().optional().nullable(),
   passportExpiry: optionalDateString,
   laborCardNo: z.string().optional().nullable(),
@@ -83,10 +91,16 @@ export const createEmployeeSchema = z.object({
   uidNo: z.string().optional().nullable(),
   fileNo: z.string().optional().nullable(),
   visaExpiry: optionalDateString,
+
+  // Salary fields ← NEW
+  basicSalary: optionalSalary,
+  housingSalary: optionalSalary,
+  transpoAllowance: optionalSalary,
+  totalSalary: optionalSalary,
 })
 
 export const updateEmployeeSchema = createEmployeeSchema.partial().omit({
-  employeeNumber: true,   // employee number cannot be changed after creation
+  employeeNumber: true,
 })
 
 export const employeeQuerySchema = z.object({

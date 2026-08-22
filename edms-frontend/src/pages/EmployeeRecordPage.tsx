@@ -51,6 +51,14 @@ function SectionCard({ title, children }: { title: string; children: React.React
   )
 }
 
+// AED formatter for the salary section — matches the "AED" labels used in EmployeeForm
+function formatAed(value?: string | number | null): string | null {
+  if (value === null || value === undefined || value === '') return null
+  const num = typeof value === 'string' ? parseFloat(value) : value
+  if (Number.isNaN(num)) return null
+  return `AED ${num.toLocaleString('en-AE')}`
+}
+
 export default function EmployeeRecordPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -70,6 +78,16 @@ export default function EmployeeRecordPage() {
   if (editing) return <EmployeeForm employee={emp} onCancel={() => setEditing(false)} onSuccess={() => setEditing(false)} />
 
   const isSuperAdmin = user?.role === 'SUPER_ADMIN'
+
+  // The generated Employee type may not have caught up with the new salary
+  // columns yet (see note below) — cast defensively like EmployeeForm.tsx does.
+  const empWithSalary = emp as typeof emp & {
+    designationEid?: string | null
+    basicSalary?: number | string | null
+    housingSalary?: number | string | null
+    transpoAllowance?: number | string | null
+    totalSalary?: number | string | null
+  }
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
@@ -157,6 +175,7 @@ export default function EmployeeRecordPage() {
             <FieldCell label="Mobile no." value={emp.mobileNo} />
             <FieldCell label="Email" value={emp.email} />
             <FieldCell label="Designation" value={emp.designation} />
+            <FieldCell label="Designation according to EID" value={empWithSalary.designationEid} />
             <FieldCell label="Employee no." value={emp.employeeNumber} />
           </SectionCard>
 
@@ -172,6 +191,13 @@ export default function EmployeeRecordPage() {
             <div className="col-span-2">
               <FieldCell label="Visa expiration" value={emp.visaExpiry} expiry />
             </div>
+          </SectionCard>
+
+          <SectionCard title="Salary details">
+            <FieldCell label="Basic salary" value={formatAed(empWithSalary.basicSalary)} />
+            <FieldCell label="Housing salary" value={formatAed(empWithSalary.housingSalary)} />
+            <FieldCell label="Transportation allowance" value={formatAed(empWithSalary.transpoAllowance)} />
+            <FieldCell label="Total salary" value={formatAed(empWithSalary.totalSalary)} />
           </SectionCard>
 
           {/* Edit record button hint — OCR is inside the edit form */}

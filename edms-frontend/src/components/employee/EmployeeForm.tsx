@@ -1,18 +1,20 @@
-import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useState, useEffect } from 'react'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useCreateEmployee, useUpdateEmployee } from '../../hooks/useEmployees'
+import { useCreateEmployee, useUpdateEmployee, useEmployees } from '../../hooks/useEmployees'
 import type { Employee, OcrResult } from '../../types'
 import { format, parseISO } from 'date-fns'
 import OcrUpload from './OcrUpload'
 
 const dateStr = z.string().regex(/^\d{2}\/\d{2}\/\d{4}$/, 'DD/MM/YYYY').optional().or(z.literal(''))
+const salaryStr = z.string().regex(/^\d{0,10}$/, 'Max 10 digits').optional().or(z.literal(''))
 const EMPLOYEE_NUMBERS = Array.from({ length: 50 }, (_, i) => `EMP-${String(i + 1).padStart(3, '0')}`)
 
 const schema = z.object({
   employeeNumber: z.string().min(1, 'Required'),
   designation: z.string().min(1, 'Required'),
+  designationEid: z.string().optional(),
   lastName: z.string().min(1, 'Required'),
   firstName: z.string().min(1, 'Required'),
   gender: z.enum(['MALE', 'FEMALE', 'OTHER']),
@@ -32,6 +34,10 @@ const schema = z.object({
     .refine(v => !v || /^\d{3}\/\d{4}\/\d{7}$/.test(v), 'Format: 202/2026/1234567')
     .optional(),
   visaExpiry: dateStr,
+  basicSalary: salaryStr,
+  housingSalary: salaryStr,
+  transpoAllowance: salaryStr,
+  totalSalary: salaryStr,
 })
 type FormData = z.infer<typeof schema>
 
@@ -40,8 +46,6 @@ function toDisplay(iso?: string | null): string {
   try { return format(parseISO(iso), 'dd/MM/yyyy') } catch { return iso }
 }
 
-// ── EID mask: XXX-XXXX-XXXXXXX-X ─────────────────────────────────────────────
-// Sections: 3 - 4 - 7 - 1 digits
 function maskEid(raw: string): string {
   const digits = raw.replace(/\D/g, '').slice(0, 15)
   const p1 = digits.slice(0, 3)
@@ -55,8 +59,6 @@ function maskEid(raw: string): string {
   return out
 }
 
-// ── File No. mask: XXX/XXXX/XXXXXXX ─────────────────────────────────────────
-// Sections: 3 / 4 / 7 digits
 function maskFileNo(raw: string): string {
   const digits = raw.replace(/\D/g, '').slice(0, 14)
   const p1 = digits.slice(0, 3)
@@ -68,19 +70,21 @@ function maskFileNo(raw: string): string {
   return out
 }
 
-const Field = ({ label, error, children, required }: {
-  label: string; error?: string; children: React.ReactNode; required?: boolean
+const Field = ({ label, error, children, required, hint }: {
+  label: string; error?: string; children: React.ReactNode; required?: boolean; hint?: string
 }) => (
   <div>
     <label className="block text-[10px] font-semibold text-slate-700 uppercase tracking-wider mb-1">
       {label}{required && <span className="text-red-500 ml-0.5">*</span>}
     </label>
     {children}
+    {hint && !error && <p className="text-[10px] text-slate-400 mt-0.5">{hint}</p>}
     {error && <p className="text-[10px] text-red-500 mt-0.5">{error}</p>}
   </div>
 )
 
 const input = "w-full px-3 py-2 text-base sm:text-sm text-slate-900 placeholder-slate-400 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white"
+const inputDisabled = "w-full px-3 py-2 text-base sm:text-sm text-slate-500 border border-slate-200 rounded-lg bg-slate-50 cursor-not-allowed"
 
 export default function EmployeeForm({ employee, onCancel, onSuccess }: {
   employee?: Employee; onCancel: () => void; onSuccess: () => void
@@ -89,11 +93,31 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
   const update = useUpdateEmployee(employee?.id ?? '')
   const isEditing = !!employee
 
-  // Local display states for masked fields
   const [eidDisplay, setEidDisplay] = useState(employee?.eidNo ?? '')
   const [fileDisplay, setFileDisplay] = useState(employee?.fileNo ?? '')
+  const employeeWithSalary = employee as (Employee & {
+    basicSalary?: number | string | null
+    housingSalary?: number | string | null
+    transpoAllowance?: number | string | null
+    totalSalary?: number | string | null
+  }) | undefined
 
-  const { register, handleSubmit, setValue, formState: { errors } } = useForm<FormData>({
+  // ── Which employee numbers are already taken? ──────────────────────────────
+  // Reuses the same list the Dashboard fetches. employeesApi.list's response
+  // shape isn't fully known here, so this unwraps defensively rather than
+  // assuming a raw array vs. a { data: [...] } / { items: [...] } wrapper.
+  const { data: employeesResponse } = useEmployees()
+  const employeesList: Employee[] = Array.isArray(employeesResponse)
+    ? employeesResponse
+    : (employeesResponse as any)?.data ?? (employeesResponse as any)?.items ?? []
+
+  const takenNumbers = new Set(
+    employeesList
+      .map((e) => e.employeeNumber)
+      .filter((num) => num !== employee?.employeeNumber) // don't gray out the record's own number when editing
+  )
+
+  const { register, handleSubmit, setValue, control, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: employee ? {
       ...employee,
@@ -102,25 +126,42 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
       laborCardExpiry: toDisplay(employee.laborCardExpiry),
       eidExpiry: toDisplay(employee.eidExpiry),
       visaExpiry: toDisplay(employee.visaExpiry),
+      basicSalary: employeeWithSalary?.basicSalary?.toString() ?? '',
+      housingSalary: employeeWithSalary?.housingSalary?.toString() ?? '',
+      transpoAllowance: employeeWithSalary?.transpoAllowance?.toString() ?? '',
+      totalSalary: employeeWithSalary?.totalSalary?.toString() ?? '',
     } : { gender: 'MALE' },
   })
 
-  // ── OCR auto-fill ──────────────────────────────────────────────────────────
+  // ── Auto-sum total salary ─────────────────────────────────────────────────
+  const basicSalary = useWatch({ control, name: 'basicSalary' })
+  const housingSalary = useWatch({ control, name: 'housingSalary' })
+  const transpoAllowance = useWatch({ control, name: 'transpoAllowance' })
+
+  useEffect(() => {
+    const b = parseFloat(basicSalary ?? '0') || 0
+    const h = parseFloat(housingSalary ?? '0') || 0
+    const t = parseFloat(transpoAllowance ?? '0') || 0
+    const total = b + h + t
+    setValue('totalSalary', total > 0 ? total.toString() : '')
+  }, [basicSalary, housingSalary, transpoAllowance, setValue])
+
+  // ── OCR auto-fill ─────────────────────────────────────────────────────────
   const handleOcrResult = (result: OcrResult) => {
-    if (result.firstName)       setValue('firstName', result.firstName)
-    if (result.lastName)        setValue('lastName', result.lastName)
-    if (result.gender)          setValue('gender', result.gender)
-    if (result.birthdate)       setValue('birthdate', result.birthdate)
-    if (result.passportNo)      setValue('passportNo', result.passportNo.slice(0, 10))
-    if (result.passportExpiry)  setValue('passportExpiry', result.passportExpiry)
+    if (result.firstName) setValue('firstName', result.firstName)
+    if (result.lastName) setValue('lastName', result.lastName)
+    if (result.gender) setValue('gender', result.gender)
+    if (result.birthdate) setValue('birthdate', result.birthdate)
+    if (result.passportNo) setValue('passportNo', result.passportNo.slice(0, 10))
+    if (result.passportExpiry) setValue('passportExpiry', result.passportExpiry)
     if (result.eidNo) {
       const masked = maskEid(result.eidNo)
       setEidDisplay(masked)
       setValue('eidNo', masked)
     }
-    if (result.eidExpiry)       setValue('eidExpiry', result.eidExpiry)
-    if (result.uidNo)           setValue('uidNo', result.uidNo.replace(/\D/g, '').slice(0, 15))
-    if (result.laborCardNo)     setValue('laborCardNo', result.laborCardNo.replace(/\D/g, '').slice(0, 9))
+    if (result.eidExpiry) setValue('eidExpiry', result.eidExpiry)
+    if (result.uidNo) setValue('uidNo', result.uidNo.replace(/\D/g, '').slice(0, 15))
+    if (result.laborCardNo) setValue('laborCardNo', result.laborCardNo.replace(/\D/g, '').slice(0, 9))
     if (result.laborCardExpiry) setValue('laborCardExpiry', result.laborCardExpiry)
   }
 
@@ -180,17 +221,31 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
             <Field label="Designation" error={errors.designation?.message} required>
               <input {...register('designation')} className={input} placeholder="Software Engineer" />
             </Field>
-            <Field label="Employee no." error={errors.employeeNumber?.message} required>
+            {/* Designation according to EID — sits right below main designation */}
+            <Field label="Designation according to EID" error={errors.designationEid?.message}>
+              <input {...register('designationEid')} className={input} placeholder="As stated on Emirates ID" />
+            </Field>
+            <Field
+              label="Employee no."
+              error={errors.employeeNumber?.message}
+              required
+              hint={isEditing ? undefined : 'Grayed-out numbers are already assigned'}
+            >
               <select
                 {...register('employeeNumber')}
                 className={input}
                 disabled={isEditing}
                 style={isEditing ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
               >
-                <option value="">Select…</option>
-                {EMPLOYEE_NUMBERS.map((num) => (
-                  <option key={num} value={num}>{num}</option>
-                ))}
+                <option value="">Select Employee Number</option>
+                {EMPLOYEE_NUMBERS.map((num) => {
+                  const taken = takenNumbers.has(num)
+                  return (
+                    <option key={num} value={num} disabled={taken} style={taken ? { color: '#94a3b8' } : undefined}>
+                      {num}{taken ? ' (Taken)' : ''}
+                    </option>
+                  )
+                })}
               </select>
             </Field>
           </div>
@@ -202,9 +257,7 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
             <p className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">Document details</p>
           </div>
           <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-
-            {/* Passport — max 10 chars, alphanumeric */}
-            <Field label="Passport #" error={errors.passportNo?.message}>
+            <Field label="Passport #" error={errors.passportNo?.message} hint="Max 10 characters">
               <input
                 {...register('passportNo')}
                 className={input}
@@ -216,14 +269,12 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
                   e.target.value = val
                 }}
               />
-              <p className="text-[10px] text-slate-400 mt-0.5">Max 10 characters</p>
             </Field>
             <Field label="Passport expiration (DD/MM/YYYY)" error={errors.passportExpiry?.message}>
               <input {...register('passportExpiry')} className={input} placeholder="01/01/2030" />
             </Field>
 
-            {/* L.C No. — max 9 digits */}
-            <Field label="L.C no." error={errors.laborCardNo?.message}>
+            <Field label="L.C no." error={errors.laborCardNo?.message} hint="Max 9 digits">
               <input
                 {...register('laborCardNo')}
                 className={input}
@@ -235,18 +286,16 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
                   e.target.value = val
                 }}
               />
-              <p className="text-[10px] text-slate-400 mt-0.5">Max 9 digits</p>
             </Field>
             <Field label="L.C expiration (DD/MM/YYYY)" error={errors.laborCardExpiry?.message}>
               <input {...register('laborCardExpiry')} className={input} placeholder="01/01/2026" />
             </Field>
 
-            {/* EID — auto-masked XXX-XXXX-XXXXXXX-X */}
-            <Field label="EID no." error={errors.eidNo?.message}>
+            <Field label="EID no." error={errors.eidNo?.message} hint="Format: XXX-XXXX-XXXXXXX-X">
               <input
                 className={input}
                 placeholder="784-1990-1234567-8"
-                maxLength={18} // 15 digits + 3 dashes
+                maxLength={18}
                 value={eidDisplay}
                 onChange={(e) => {
                   const masked = maskEid(e.target.value)
@@ -254,14 +303,12 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
                   setValue('eidNo', masked, { shouldValidate: true })
                 }}
               />
-              <p className="text-[10px] text-slate-400 mt-0.5">Format: XXX-XXXX-XXXXXXX-X</p>
             </Field>
             <Field label="EID expiration (DD/MM/YYYY)" error={errors.eidExpiry?.message}>
               <input {...register('eidExpiry')} className={input} placeholder="01/01/2027" />
             </Field>
 
-            {/* UID — max 15 digits */}
-            <Field label="UID no." error={errors.uidNo?.message}>
+            <Field label="UID no." error={errors.uidNo?.message} hint="Max 15 digits">
               <input
                 {...register('uidNo')}
                 className={input}
@@ -273,15 +320,13 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
                   e.target.value = val
                 }}
               />
-              <p className="text-[10px] text-slate-400 mt-0.5">Max 15 digits</p>
             </Field>
 
-            {/* File No. — auto-masked XXX/XXXX/XXXXXXX */}
-            <Field label="File no." error={errors.fileNo?.message}>
+            <Field label="File no." error={errors.fileNo?.message} hint="Format: 202/2026/1234567">
               <input
                 className={input}
                 placeholder="202/2026/1234567"
-                maxLength={16} // 14 digits + 2 slashes
+                maxLength={16}
                 value={fileDisplay}
                 onChange={(e) => {
                   const masked = maskFileNo(e.target.value)
@@ -289,7 +334,6 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
                   setValue('fileNo', masked, { shouldValidate: true })
                 }}
               />
-              <p className="text-[10px] text-slate-400 mt-0.5">Format: 202/2026/1234567</p>
             </Field>
 
             <div className="sm:col-span-2">
@@ -297,6 +341,71 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
                 <input {...register('visaExpiry')} className={input} placeholder="01/01/2026" />
               </Field>
             </div>
+          </div>
+        </div>
+
+        {/* ── Salary details ── */}
+        <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
+          <div className="px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-50 border-b border-slate-200">
+            <p className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">Salary details</p>
+          </div>
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Field label="Basic salary (AED)" error={errors.basicSalary?.message} hint="Max 10 digits">
+              <input
+                {...register('basicSalary')}
+                className={input}
+                placeholder="5000"
+                maxLength={10}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '').slice(0, 10)
+                  setValue('basicSalary', val, { shouldValidate: true })
+                  e.target.value = val
+                }}
+              />
+            </Field>
+
+            <Field label="Housing salary (AED)" error={errors.housingSalary?.message} hint="Max 10 digits">
+              <input
+                {...register('housingSalary')}
+                className={input}
+                placeholder="2000"
+                maxLength={10}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '').slice(0, 10)
+                  setValue('housingSalary', val, { shouldValidate: true })
+                  e.target.value = val
+                }}
+              />
+            </Field>
+
+            <Field label="Transportation allowance (AED)" error={errors.transpoAllowance?.message} hint="Max 10 digits">
+              <input
+                {...register('transpoAllowance')}
+                className={input}
+                placeholder="500"
+                maxLength={10}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '').slice(0, 10)
+                  setValue('transpoAllowance', val, { shouldValidate: true })
+                  e.target.value = val
+                }}
+              />
+            </Field>
+
+            {/* Total — read-only, auto-summed */}
+            <Field label="Total salary (AED)">
+              <div className="relative">
+                <input
+                  {...register('totalSalary')}
+                  className={inputDisabled}
+                  readOnly
+                  tabIndex={-1}
+                  placeholder="Auto-calculated"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-medium">AUTO</span>
+              </div>
+              <p className="text-[10px] text-slate-400 mt-0.5">Sum of basic + housing + transportation</p>
+            </Field>
           </div>
         </div>
 
