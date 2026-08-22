@@ -21,9 +21,9 @@ export default function LoginPage() {
   const onSubmit = (data: FormData) => login.mutate(data)
 
   return (
-    <div className="min-h-screen flex">
-      {/* Left panel */}
-      <div className="w-64 bg-slate-900 flex flex-col items-center justify-center p-8 gap-6">
+    <div className="min-h-screen flex flex-col md:flex-row">
+      {/* Left panel — hidden on mobile, shown from md up */}
+      <div className="hidden md:flex md:w-64 shrink-0 bg-slate-900 flex-col items-center justify-center p-8 gap-6">
         <div className="flex flex-col items-center gap-3">
           <div className="w-12 h-12 rounded-xl bg-slate-700 flex items-center justify-center">
             <span className="text-white text-lg font-bold">E</span>
@@ -49,9 +49,9 @@ export default function LoginPage() {
       </div>
 
       {/* Right panel */}
-      <div className="flex-1 flex items-center justify-center bg-slate-50">
-        <div className="w-full max-w-sm px-4">
-          <h1 className="text-xl font-semibold !text-black mb-1">Sign in</h1>
+      <div className="flex-1 flex items-center justify-center bg-slate-50 px-4 py-8 sm:py-10">
+        <div className="w-full max-w-sm">
+          <h1 className="text-lg sm:text-xl font-semibold !text-black mb-1">Sign in</h1>
           <p className="text-sm text-slate-500 mb-6">Enter your credentials to access the dashboard.</p>
 
           <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4">
@@ -61,7 +61,7 @@ export default function LoginPage() {
                 {...register('email')}
                 type="email"
                 placeholder="name@company.ae"
-                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+                className="w-full px-3 py-2.5 sm:py-2 text-base sm:text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
               />
               {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email.message}</p>}
             </div>
@@ -73,7 +73,7 @@ export default function LoginPage() {
                   {...register('password')}
                   type={showPw ? 'text' : 'password'}
                   placeholder="••••••••"
-                  className="w-full px-3 py-2 pr-10 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+                  className="w-full px-3 py-2.5 sm:py-2 pr-10 text-base sm:text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
                 />
                 <button type="button" onClick={() => setShowPw((p) => !p)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
