@@ -15,6 +15,7 @@ import { sendExpiryDigest }   from './services/notification.service'
 import { purgeExpiredTokens } from './services/auth.service'
 
 const app = express()
+app.set('trust proxy', 1)   // Render sits behind one reverse proxy — trust its X-Forwarded-For
 
 // ─── Security headers ─────────────────────────────────────────────────────────
 app.use(helmet())
