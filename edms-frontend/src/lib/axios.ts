@@ -12,6 +12,15 @@ const api = axios.create({
 api.interceptors.response.use(
   (res) => res,
   async (err) => {
+    const isLoginRequest = err.config?.url?.includes('/api/auth/login')
+
+    // A 401 from the login endpoint itself just means "wrong credentials" —
+    // it's not an expired session, so don't try to refresh or redirect.
+    // Let it reject normally so LoginPage's `login.error` can actually render.
+    if (isLoginRequest) {
+      return Promise.reject(err)
+    }
+
     if (err.response?.status === 401 && !err.config._retry) {
       err.config._retry = true
       try {
