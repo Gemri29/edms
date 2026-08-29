@@ -1,0 +1,25 @@
+name: Daily Expiry Notification
+
+on:
+  schedule:
+    # 04:00 UTC = 08:00 Gulf Standard Time (UTC+4, no DST, so this stays fixed year-round)
+    - cron: '0 4 * * *'
+  workflow_dispatch: {} # lets you manually trigger a test run from the Actions tab
+
+jobs:
+  trigger-digest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call the expiry digest endpoint
+        run: |
+          response=$(curl -s -o response.txt -w "%{http_code}" \
+            -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+            https://edms-kwww.onrender.com/api/cron/notify)
+
+          echo "HTTP status: $response"
+          cat response.txt
+
+          if [ "$response" -ne 200 ]; then
+            echo "Digest trigger failed with status $response"
+            exit 1
+          fi
