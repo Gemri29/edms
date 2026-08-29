@@ -13,6 +13,7 @@ import ocrRoutes      from './routes/ocr.routes'
 
 import { sendExpiryDigest }   from './services/notification.service'
 import { purgeExpiredTokens } from './services/auth.service'
+import cronRoutes from './routes/cron.routes'
 
 const app = express()
 app.set('trust proxy', 1)   // Render sits behind one reverse proxy — trust its X-Forwarded-For
@@ -44,7 +45,7 @@ app.use('/api/auth',      authRoutes)
 app.use('/api/employees', employeeRoutes)
 app.use('/api/users',     userRoutes)
 app.use('/api/ocr',       ocrRoutes)
-
+app.use('/api/cron',      cronRoutes) // external scheduler triggers the digest via this route
 // ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() })
