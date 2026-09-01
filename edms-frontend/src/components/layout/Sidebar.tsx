@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { NavLink } from 'react-router-dom'
-import { LayoutDashboard, Archive, Users, LogOut, ChevronLeft, ChevronRight } from 'lucide-react'
+import { LayoutDashboard, Archive, Users, LogOut, ChevronLeft, ChevronRight, Settings } from 'lucide-react'
 import { useAuthStore } from '../../store/auth.store'
 import { useLogout } from '../../hooks/useAuth'
 import { getInitials } from '../../lib/utils'
@@ -70,8 +70,12 @@ export default function Sidebar() {
           )}
         </nav>
 
-        {/* User */}
-        <div className="p-2 border-t border-slate-200">
+        {/* Settings + User — pinned to bottom */}
+        <div className="p-2 border-t border-slate-200 flex flex-col gap-0.5">
+          {/* Settings link — just above sign out */}
+          {navItem('/settings', 'Settings', Settings)}
+
+          {/* User row */}
           <div className={`flex items-center gap-2 px-3 py-2 rounded-lg ${collapsed ? 'justify-center flex-col px-2' : ''}`}>
             <div className="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-[10px] font-semibold text-slate-600 flex-shrink-0">
               {user ? getInitials(user.fullName) : '?'}

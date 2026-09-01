@@ -9,6 +9,7 @@ import AccountsPage from './pages/AccountsPage'
 import EmployeeForm from './components/employee/EmployeeForm'
 import { useAuthStore } from './store/auth.store'
 import { useNavigate } from 'react-router-dom'
+import SettingsPage from './pages/SettingsPage'
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, staleTime: 30_000 } },
@@ -39,6 +40,7 @@ export default function App() {
             <Route path="/accounts" element={
               <SuperAdminRoute><AccountsPage /></SuperAdminRoute>
             } />
+            <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

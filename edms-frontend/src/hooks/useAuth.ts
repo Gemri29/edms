@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { authApi } from '../api/auth'
 import { useAuthStore } from '../store/auth.store'
@@ -43,5 +43,23 @@ export function useMe() {
   })
 }
 
+export function useUpdateProfile() {
+  const setUser = useAuthStore((s) => s.setUser)
+  const qc = useQueryClient()
 
+  return useMutation({
+    mutationFn: (data: { fullName?: string; email?: string }) =>
+      authApi.updateProfile(data),
+    onSuccess: (res) => {
+      setUser(res.data.data.user)
+      qc.invalidateQueries({ queryKey: ['me'] })
+    },
+  })
+}
 
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: (data: { currentPassword: string; newPassword: string }) =>
+      authApi.changePassword(data),
+  })
+}

@@ -4,6 +4,9 @@ import { authenticate } from '../middleware/auth'
 import { validate } from '../middleware/auth'
 import { loginSchema } from '../lib/schemas'
 import rateLimit from 'express-rate-limit'
+import { updateProfile, changePassword } from '../controllers/auth.controller'
+import { changePasswordSchema } from '../lib/schemas'
+
 
 const router = Router()
 
@@ -23,5 +26,8 @@ router.post('/login',   loginLimiter, validate(loginSchema), login)
 router.post('/logout',  authenticate, logout)
 router.post('/refresh', refresh)
 router.get('/me',       authenticate, me)
+
+router.put('/profile',         authenticate, updateProfile)
+router.put('/change-password', authenticate, validate(changePasswordSchema), changePassword)
 
 export default router

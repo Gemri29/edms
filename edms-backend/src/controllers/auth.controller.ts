@@ -1,6 +1,9 @@
 import { Request, Response } from 'express'
 import { loginUser, logoutUser, refreshAccessToken } from '../services/auth.service'
 import { AuthenticatedRequest } from '../types'
+import { verifyPassword, hashPassword } from '../services/auth.service'
+import { z } from 'zod'
+import { prisma } from '../lib/prisma'
 
 const IS_PROD = process.env.NODE_ENV === 'production'
 
@@ -10,6 +13,11 @@ const COOKIE_OPTIONS = {
   sameSite: (IS_PROD ? 'none' : 'lax') as 'none' | 'lax',
   path: '/',
 }
+
+const updateProfileSchema = z.object({
+  fullName: z.string().min(2, 'Name must be at least 2 characters').optional(),
+  email: z.string().email('Invalid email address').optional(),
+})
 
 // ─── POST /api/auth/login ─────────────────────────────────────────────────────
 
@@ -75,6 +83,78 @@ export async function refresh(req: Request, res: Response): Promise<void> {
     res.json({ success: true, message: 'Token refreshed.' })
   } catch (err) {
     res.status(401).json({ success: false, error: (err as Error).message })
+  }
+}
+
+// ─── PUT /api/auth/profile ────────────────────────────────────────────────────
+export async function updateProfile(req: Request, res: Response): Promise<void> {
+  try {
+    const user = (req as AuthenticatedRequest).user
+    const parsed = updateProfileSchema.safeParse(req.body)
+
+    if (!parsed.success) {
+      res.status(422).json({ success: false, error: 'Validation failed', details: parsed.error.flatten().fieldErrors })
+      return
+    }
+
+    const { fullName, email } = parsed.data
+
+    // Check email not already taken by another user
+    if (email) {
+      const existing = await prisma.user.findUnique({ where: { email: email.toLowerCase() } })
+      if (existing && existing.id !== user.sub) {
+        res.status(409).json({ success: false, error: 'This email is already in use by another account.' })
+        return
+      }
+    }
+
+    const updated = await prisma.user.update({
+      where: { id: user.sub },
+      data: {
+        ...(fullName && { fullName }),
+        ...(email && { email: email.toLowerCase() }),
+      },
+      select: { id: true, email: true, fullName: true, role: true },
+    })
+
+    res.json({ success: true, data: { user: updated }, message: 'Profile updated successfully.' })
+  } catch (err) {
+    res.status(500).json({ success: false, error: (err as Error).message })
+  }
+}
+
+// ─── PUT /api/auth/change-password ───────────────────────────────────────────
+export async function changePassword(req: Request, res: Response): Promise<void> {
+  try {
+    const user = (req as AuthenticatedRequest).user
+    const { currentPassword, newPassword } = req.body
+
+    const dbUser = await prisma.user.findUnique({ where: { id: user.sub } })
+    if (!dbUser) {
+      res.status(404).json({ success: false, error: 'User not found.' })
+      return
+    }
+
+    const valid = await verifyPassword(currentPassword, dbUser.passwordHash)
+    if (!valid) {
+      res.status(401).json({ success: false, error: 'Current password is incorrect.' })
+      return
+    }
+
+    if (currentPassword === newPassword) {
+      res.status(422).json({ success: false, error: 'New password must be different from your current password.' })
+      return
+    }
+
+    const newHash = await hashPassword(newPassword)
+    await prisma.user.update({
+      where: { id: user.sub },
+      data: { passwordHash: newHash, mustChangePw: false },
+    })
+
+    res.json({ success: true, message: 'Password changed successfully.' })
+  } catch (err) {
+    res.status(500).json({ success: false, error: (err as Error).message })
   }
 }
 
