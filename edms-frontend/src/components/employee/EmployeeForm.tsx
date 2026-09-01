@@ -19,7 +19,7 @@ const schema = z.object({
   firstName: z.string().min(1, 'Required'),
   gender: z.enum(['MALE', 'FEMALE', 'OTHER']),
   birthdate: z.string().min(1, 'Required'),
-  mobileNo: z.string().min(7, 'Required'),
+  mobileNo: z.string().min(1, 'Required').max(11, 'Max 11 characters'),
   email: z.string().email('Invalid email'),
   passportNo: z.string().max(10, 'Max 10 characters').optional(),
   passportExpiry: dateStr,
@@ -237,7 +237,7 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
               <input {...register('birthdate')} className={inputClass(!!errors.birthdate)} placeholder="01/01/1990" />
             </Field>
             <Field label="Mobile no." error={errors.mobileNo?.message} required>
-              <input {...register('mobileNo')} className={inputClass(!!errors.mobileNo)} placeholder="+971 50 000 0000" />
+              <input {...register('mobileNo')} className={inputClass(!!errors.mobileNo)} placeholder="+971 50 000 0000" maxLength={11} />
             </Field>
             <Field label="Email" error={errors.email?.message} required>
               <input {...register('email')} className={inputClass(!!errors.email)} placeholder="name@company.ae" />
