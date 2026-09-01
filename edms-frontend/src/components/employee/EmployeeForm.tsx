@@ -74,7 +74,7 @@ const Field = ({ label, error, children, required, hint }: {
   label: string; error?: string; children: React.ReactNode; required?: boolean; hint?: string
 }) => (
   <div>
-    <label className="block text-[10px] font-semibold text-slate-700 uppercase tracking-wider mb-1">
+    <label className={`block text-[10px] font-semibold uppercase tracking-wider mb-1 ${error ? 'text-red-600' : 'text-slate-700'}`}>
       {label}{required && <span className="text-red-500 ml-0.5">*</span>}
     </label>
     {children}
@@ -83,7 +83,18 @@ const Field = ({ label, error, children, required, hint }: {
   </div>
 )
 
-const input = "w-full px-3 py-2 text-base sm:text-sm text-slate-900 placeholder-slate-400 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 bg-white"
+// Base classes shared by every input/select, split so error state can swap
+// just the border/ring/background instead of duplicating the whole string.
+const inputBase = "w-full px-3 py-2 text-base sm:text-sm text-slate-900 placeholder-slate-400 rounded-lg focus:outline-none focus:ring-2 bg-white border"
+const inputValidState = "border-slate-300 focus:ring-slate-900"
+const inputErrorState = "border-red-400 bg-red-50 focus:ring-red-400"
+
+// hasError -> red border/ring + tinted background, on top of the existing
+// inline error message below the field. Keeps errors visible at a glance on
+// a long form instead of relying on small red text alone.
+const inputClass = (hasError?: boolean) =>
+  `${inputBase} ${hasError ? inputErrorState : inputValidState}`
+
 const inputDisabled = "w-full px-3 py-2 text-base sm:text-sm text-slate-500 border border-slate-200 rounded-lg bg-slate-50 cursor-not-allowed"
 
 export default function EmployeeForm({ employee, onCancel, onSuccess }: {
@@ -102,7 +113,7 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
     totalSalary?: number | string | null
   }) | undefined
 
-  // ── Which employee numbers are already taken? ──────────────────────────────
+  // -- Which employee numbers are already taken? --------------------------
   // Reuses the same list the Dashboard fetches. employeesApi.list's response
   // shape isn't fully known here, so this unwraps defensively rather than
   // assuming a raw array vs. a { data: [...] } / { items: [...] } wrapper.
@@ -117,7 +128,7 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
       .filter((num) => num !== employee?.employeeNumber) // don't gray out the record's own number when editing
   )
 
-  const { register, handleSubmit, setValue, control, formState: { errors } } = useForm<FormData>({
+  const { register, handleSubmit, setValue, setError, control, formState: { errors } } = useForm<FormData>({
     resolver: zodResolver(schema),
     defaultValues: employee ? {
       ...employee,
@@ -133,7 +144,7 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
     } : { gender: 'MALE' },
   })
 
-  // ── Auto-sum total salary ─────────────────────────────────────────────────
+  // -- Auto-sum total salary ------------------------------------------------
   const basicSalary = useWatch({ control, name: 'basicSalary' })
   const housingSalary = useWatch({ control, name: 'housingSalary' })
   const transpoAllowance = useWatch({ control, name: 'transpoAllowance' })
@@ -146,7 +157,7 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
     setValue('totalSalary', total > 0 ? total.toString() : '')
   }, [basicSalary, housingSalary, transpoAllowance, setValue])
 
-  // ── OCR auto-fill ─────────────────────────────────────────────────────────
+  // -- OCR auto-fill ----------------------------------------------------------
   const handleOcrResult = (result: OcrResult) => {
     if (result.firstName) setValue('firstName', result.firstName)
     if (result.lastName) setValue('lastName', result.lastName)
@@ -166,12 +177,25 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
   }
 
   const onSubmit = async (data: FormData) => {
-    if (isEditing) {
-      await update.mutateAsync(data)
-    } else {
-      await create.mutateAsync(data)
+    try {
+      if (isEditing) {
+        await update.mutateAsync(data)
+      } else {
+        await create.mutateAsync(data)
+      }
+      onSuccess()
+    } catch (err: any) {
+      // The validate() middleware in employee.routes.ts returns per-field
+      // errors under `details` (from Zod's .flatten().fieldErrors) on a 422.
+      // Map each one onto the matching field so it highlights via the same
+      // errors-driven inputClass() styling as client-side validation.
+      const fieldErrors = err?.response?.data?.details as Record<string, string[]> | undefined
+      if (fieldErrors) {
+        for (const [field, messages] of Object.entries(fieldErrors)) {
+          setError(field as keyof FormData, { type: 'server', message: messages[0] })
+        }
+      }
     }
-    onSuccess()
   }
 
   const isPending = create.isPending || update.isPending
@@ -187,43 +211,43 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
 
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4 sm:gap-5">
 
-        {/* ── OCR Upload ── */}
+        {/* -- OCR Upload -- */}
         <OcrUpload onExtracted={handleOcrResult} />
 
-        {/* ── Personal details ── */}
+        {/* -- Personal details -- */}
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
           <div className="px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-50 border-b border-slate-200">
             <p className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">Personal details</p>
           </div>
           <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Field label="First name" error={errors.firstName?.message} required>
-              <input {...register('firstName')} className={input} placeholder="Juan" />
+              <input {...register('firstName')} className={inputClass(!!errors.firstName)} placeholder="Juan" />
             </Field>
             <Field label="Last name" error={errors.lastName?.message} required>
-              <input {...register('lastName')} className={input} placeholder="Dela Cruz" />
+              <input {...register('lastName')} className={inputClass(!!errors.lastName)} placeholder="Dela Cruz" />
             </Field>
             <Field label="Gender" error={errors.gender?.message} required>
-              <select {...register('gender')} className={input}>
+              <select {...register('gender')} className={inputClass(!!errors.gender)}>
                 <option value="MALE">Male</option>
                 <option value="FEMALE">Female</option>
                 <option value="OTHER">Other</option>
               </select>
             </Field>
             <Field label="Birthdate (DD/MM/YYYY)" error={errors.birthdate?.message} required>
-              <input {...register('birthdate')} className={input} placeholder="01/01/1990" />
+              <input {...register('birthdate')} className={inputClass(!!errors.birthdate)} placeholder="01/01/1990" />
             </Field>
             <Field label="Mobile no." error={errors.mobileNo?.message} required>
-              <input {...register('mobileNo')} className={input} placeholder="+971 50 000 0000" />
+              <input {...register('mobileNo')} className={inputClass(!!errors.mobileNo)} placeholder="+971 50 000 0000" />
             </Field>
             <Field label="Email" error={errors.email?.message} required>
-              <input {...register('email')} className={input} placeholder="name@company.ae" />
+              <input {...register('email')} className={inputClass(!!errors.email)} placeholder="name@company.ae" />
             </Field>
             <Field label="Designation" error={errors.designation?.message} required>
-              <input {...register('designation')} className={input} placeholder="Software Engineer" />
+              <input {...register('designation')} className={inputClass(!!errors.designation)} placeholder="Software Engineer" />
             </Field>
-            {/* Designation according to EID — sits right below main designation */}
+            {/* Designation according to EID -- sits right below main designation */}
             <Field label="Designation according to EID" error={errors.designationEid?.message}>
-              <input {...register('designationEid')} className={input} placeholder="As stated on Emirates ID" />
+              <input {...register('designationEid')} className={inputClass(!!errors.designationEid)} placeholder="As stated on Emirates ID" />
             </Field>
             <Field
               label="Employee no."
@@ -233,7 +257,7 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
             >
               <select
                 {...register('employeeNumber')}
-                className={input}
+                className={inputClass(!!errors.employeeNumber)}
                 disabled={isEditing}
                 style={isEditing ? { opacity: 0.5, cursor: 'not-allowed' } : {}}
               >
@@ -251,7 +275,7 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
           </div>
         </div>
 
-        {/* ── Document details ── */}
+        {/* -- Document details -- */}
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
           <div className="px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-50 border-b border-slate-200">
             <p className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">Document details</p>
@@ -260,7 +284,7 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
             <Field label="Passport #" error={errors.passportNo?.message} hint="Max 10 characters">
               <input
                 {...register('passportNo')}
-                className={input}
+                className={inputClass(!!errors.passportNo)}
                 placeholder="P1234567AB"
                 maxLength={10}
                 onChange={(e) => {
@@ -271,13 +295,13 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
               />
             </Field>
             <Field label="Passport expiration (DD/MM/YYYY)" error={errors.passportExpiry?.message}>
-              <input {...register('passportExpiry')} className={input} placeholder="01/01/2030" />
+              <input {...register('passportExpiry')} className={inputClass(!!errors.passportExpiry)} placeholder="01/01/2030" />
             </Field>
 
             <Field label="L.C no." error={errors.laborCardNo?.message} hint="Max 9 digits">
               <input
                 {...register('laborCardNo')}
-                className={input}
+                className={inputClass(!!errors.laborCardNo)}
                 placeholder="123456789"
                 maxLength={9}
                 onChange={(e) => {
@@ -288,12 +312,12 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
               />
             </Field>
             <Field label="L.C expiration (DD/MM/YYYY)" error={errors.laborCardExpiry?.message}>
-              <input {...register('laborCardExpiry')} className={input} placeholder="01/01/2026" />
+              <input {...register('laborCardExpiry')} className={inputClass(!!errors.laborCardExpiry)} placeholder="01/01/2026" />
             </Field>
 
             <Field label="EID no." error={errors.eidNo?.message} hint="Format: XXX-XXXX-XXXXXXX-X">
               <input
-                className={input}
+                className={inputClass(!!errors.eidNo)}
                 placeholder="784-1990-1234567-8"
                 maxLength={18}
                 value={eidDisplay}
@@ -305,13 +329,13 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
               />
             </Field>
             <Field label="EID expiration (DD/MM/YYYY)" error={errors.eidExpiry?.message}>
-              <input {...register('eidExpiry')} className={input} placeholder="01/01/2027" />
+              <input {...register('eidExpiry')} className={inputClass(!!errors.eidExpiry)} placeholder="01/01/2027" />
             </Field>
 
             <Field label="UID no." error={errors.uidNo?.message} hint="Max 15 digits">
               <input
                 {...register('uidNo')}
-                className={input}
+                className={inputClass(!!errors.uidNo)}
                 placeholder="784199012345678"
                 maxLength={15}
                 onChange={(e) => {
@@ -324,7 +348,7 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
 
             <Field label="File no." error={errors.fileNo?.message} hint="Format: 202/2026/1234567">
               <input
-                className={input}
+                className={inputClass(!!errors.fileNo)}
                 placeholder="202/2026/1234567"
                 maxLength={16}
                 value={fileDisplay}
@@ -338,13 +362,13 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
 
             <div className="sm:col-span-2">
               <Field label="Visa expiration (DD/MM/YYYY)" error={errors.visaExpiry?.message}>
-                <input {...register('visaExpiry')} className={input} placeholder="01/01/2026" />
+                <input {...register('visaExpiry')} className={inputClass(!!errors.visaExpiry)} placeholder="01/01/2026" />
               </Field>
             </div>
           </div>
         </div>
 
-        {/* ── Salary details ── */}
+        {/* -- Salary details -- */}
         <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">
           <div className="px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-50 border-b border-slate-200">
             <p className="text-[10px] font-bold text-slate-700 uppercase tracking-wider">Salary details</p>
@@ -353,7 +377,7 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
             <Field label="Basic salary (AED)" error={errors.basicSalary?.message} hint="Max 10 digits">
               <input
                 {...register('basicSalary')}
-                className={input}
+                className={inputClass(!!errors.basicSalary)}
                 placeholder="5000"
                 maxLength={10}
                 onChange={(e) => {
@@ -367,7 +391,7 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
             <Field label="Housing salary (AED)" error={errors.housingSalary?.message} hint="Max 10 digits">
               <input
                 {...register('housingSalary')}
-                className={input}
+                className={inputClass(!!errors.housingSalary)}
                 placeholder="2000"
                 maxLength={10}
                 onChange={(e) => {
@@ -381,7 +405,7 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
             <Field label="Transportation allowance (AED)" error={errors.transpoAllowance?.message} hint="Max 10 digits">
               <input
                 {...register('transpoAllowance')}
-                className={input}
+                className={inputClass(!!errors.transpoAllowance)}
                 placeholder="500"
                 maxLength={10}
                 onChange={(e) => {
@@ -392,7 +416,7 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
               />
             </Field>
 
-            {/* Total — read-only, auto-summed */}
+            {/* Total -- read-only, auto-summed */}
             <Field label="Total salary (AED)">
               <div className="relative">
                 <input

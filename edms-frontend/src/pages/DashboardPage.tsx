@@ -1,11 +1,18 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Search, Filter, ArrowUpAZ, ArrowDownAZ, Plus, ChevronRight } from 'lucide-react'
+import { Search, Filter, ArrowUpAZ, ArrowDownAZ, Plus, ChevronRight, X } from 'lucide-react'
 import { useEmployees } from '../hooks/useEmployees'
 import { getRowBg, getEmployeeExpiryState, getInitials, formatDate, daysUntil } from '../lib/utils'
 import { EXPIRY_FIELDS } from '../types'
 import type { Employee, EmployeeFilters } from '../types'
 import NotificationBell from '../components/layout/NotificationBell'
+
+const DEFAULT_FILTERS: EmployeeFilters = {
+  status: 'ACTIVE',
+  sortBy: 'lastName',
+  sortOrder: 'asc',
+  page: 1,
+}
 
 function ExpiryBadges({ emp }: { emp: Employee }) {
   const badges = EXPIRY_FIELDS.flatMap(({ key, label }): Array<{
@@ -42,15 +49,67 @@ function ExpiryBadges({ emp }: { emp: Employee }) {
 
 export default function DashboardPage() {
   const navigate = useNavigate()
-  const [filters, setFilters] = useState<EmployeeFilters>({ status: 'ACTIVE', sortBy: 'lastName', sortOrder: 'asc', page: 1 })
+  const [filters, setFilters] = useState<EmployeeFilters>(DEFAULT_FILTERS)
   const [search, setSearch] = useState('')
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false)
+  const filterMenuRef = useRef<HTMLDivElement>(null)
   const { data, isLoading } = useEmployees(filters)
+
+  // Close the filter dropdown when clicking outside it
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (filterMenuRef.current && !filterMenuRef.current.contains(e.target as Node)) {
+        setFilterMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   const toggleSort = () => setFilters((f) => ({ ...f, sortOrder: f.sortOrder === 'asc' ? 'desc' : 'asc' }))
 
   const handleSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearch(e.target.value)
     setFilters((f) => ({ ...f, search: e.target.value, page: 1 }))
+  }
+
+  // Derived directly from filters, rather than separate local state, so the
+  // checkboxes always reflect what's actually being applied — including if
+  // sortBy/expiryStatus ever get changed some other way.
+  const sortByEmployeeNumber = filters.sortBy === 'employeeNumber'
+  const expiringOnly = filters.expiryStatus === 'expiring'
+  const activeFilterCount = [sortByEmployeeNumber, expiringOnly].filter(Boolean).length
+
+  // Each checkbox applies immediately on click — no "Apply" button, matching
+  // a Google-style filter dropdown.
+  const toggleEmployeeNumberSort = (checked: boolean) => {
+    setFilters((f) => ({
+      ...f,
+      sortBy: checked ? 'employeeNumber' : 'lastName',
+      sortOrder: 'asc', // "ascending order starting from 1"
+      page: 1,
+    }))
+  }
+
+  const toggleExpiringOnly = (checked: boolean) => {
+    setFilters((f) => ({
+      ...f,
+      expiryStatus: checked ? 'expiring' : 'all',
+      page: 1,
+    }))
+  }
+
+  // Clears only the filter-dropdown-controlled fields (sort + expiry status)
+  // back to defaults — leaves the search box alone, since that's a separate
+  // control from the filter dropdown itself.
+  const clearAllFilters = () => {
+    setFilters((f) => ({
+      ...f,
+      sortBy: 'lastName',
+      sortOrder: 'asc',
+      expiryStatus: 'all',
+      page: 1,
+    }))
   }
 
   const employees = data?.data ?? []
@@ -69,19 +128,62 @@ export default function DashboardPage() {
             className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 bg-slate-50"
           />
         </div>
-        <button
-          onClick={() => setFilters((f) => ({
-            ...f,
-            expiryStatus: f.expiryStatus === 'expiring' ? 'all' : 'expiring',
-          }))}
-          className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${
-            filters.expiryStatus === 'expiring'
-              ? 'bg-slate-900 text-white border-slate-900'
-              : 'border-slate-200 text-slate-600 hover:bg-slate-50'
-          }`}
-        >
-          <Filter size={13} /> Filter
-        </button>
+
+        {/* Filter dropdown */}
+        <div className="relative" ref={filterMenuRef}>
+          <button
+            onClick={() => setFilterMenuOpen((open) => !open)}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border transition-colors ${
+              activeFilterCount > 0
+                ? 'bg-slate-900 text-white border-slate-900'
+                : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+            }`}
+          >
+            <Filter size={13} /> Filter
+            {activeFilterCount > 0 && (
+              <span className="flex items-center justify-center w-4 h-4 rounded-full bg-white text-slate-900 text-[10px] font-bold">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+
+          {filterMenuOpen && (
+            <div className="absolute right-0 mt-2 w-64 bg-white border border-slate-200 rounded-xl shadow-lg z-20 overflow-hidden">
+              <div className="p-3 flex flex-col gap-1">
+                <label className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-slate-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={sortByEmployeeNumber}
+                    onChange={(e) => toggleEmployeeNumberSort(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                  />
+                  <span className="text-sm text-slate-700">Employee number (ascending)</span>
+                </label>
+
+                <label className="flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-slate-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={expiringOnly}
+                    onChange={(e) => toggleExpiringOnly(e.target.checked)}
+                    className="w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                  />
+                  <span className="text-sm text-slate-700">Expiring soon</span>
+                </label>
+              </div>
+
+              <div className="border-t border-slate-100 p-2">
+                <button
+                  onClick={clearAllFilters}
+                  disabled={activeFilterCount === 0}
+                  className="flex items-center gap-1.5 w-full px-2 py-1.5 text-xs font-medium text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-lg disabled:opacity-40 disabled:hover:bg-transparent"
+                >
+                  <X size={12} /> Clear all filters
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
         <button
           onClick={toggleSort}
           className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-lg border border-slate-900 bg-slate-900 text-white"

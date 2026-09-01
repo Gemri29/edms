@@ -11,7 +11,7 @@ import {
 import { AuthenticatedRequest, PaginatedResponse } from '../types'
 import { EmployeeQuery } from '../lib/schemas'
 
-// ─── GET /api/employees ───────────────────────────────────────────────────────
+// --- GET /api/employees ---------------------------------------------------
 
 export async function getEmployees(req: Request, res: Response): Promise<void> {
   try {
@@ -23,7 +23,7 @@ export async function getEmployees(req: Request, res: Response): Promise<void> {
   }
 }
 
-// ─── GET /api/employees/:id ───────────────────────────────────────────────────
+// --- GET /api/employees/:id ------------------------------------------------
 
 export async function getEmployeeById(req: Request, res: Response): Promise<void> {
   try {
@@ -35,7 +35,12 @@ export async function getEmployeeById(req: Request, res: Response): Promise<void
   }
 }
 
-// ─── POST /api/employees ──────────────────────────────────────────────────────
+// --- POST /api/employees ---------------------------------------------------
+// req.body has already been validated AND transformed (DD/MM/YYYY strings ->
+// Date objects, salary strings -> numbers) by the validate(createEmployeeSchema)
+// middleware in employee.routes.ts before this handler ever runs. Don't
+// re-parse it here -- that middleware already returns per-field errors as
+// `details` on a 422 if validation fails.
 
 export async function createEmployeeHandler(req: Request, res: Response): Promise<void> {
   try {
@@ -49,7 +54,8 @@ export async function createEmployeeHandler(req: Request, res: Response): Promis
   }
 }
 
-// ─── PUT /api/employees/:id ───────────────────────────────────────────────────
+// --- PUT /api/employees/:id -------------------------------------------------
+// Same as above -- req.body already validated/transformed by validate(updateEmployeeSchema).
 
 export async function updateEmployeeHandler(req: Request, res: Response): Promise<void> {
   try {
@@ -63,7 +69,7 @@ export async function updateEmployeeHandler(req: Request, res: Response): Promis
   }
 }
 
-// ─── PATCH /api/employees/:id/archive ────────────────────────────────────────
+// --- PATCH /api/employees/:id/archive ---------------------------------------
 
 export async function archiveEmployeeHandler(req: Request, res: Response): Promise<void> {
   try {
@@ -77,7 +83,7 @@ export async function archiveEmployeeHandler(req: Request, res: Response): Promi
   }
 }
 
-// ─── PATCH /api/employees/:id/restore ────────────────────────────────────────
+// --- PATCH /api/employees/:id/restore ---------------------------------------
 
 export async function restoreEmployeeHandler(req: Request, res: Response): Promise<void> {
   try {
@@ -91,7 +97,7 @@ export async function restoreEmployeeHandler(req: Request, res: Response): Promi
   }
 }
 
-// ─── DELETE /api/employees/:id ────────────────────────────────────────────────
+// --- DELETE /api/employees/:id -----------------------------------------------
 
 export async function deleteEmployeeHandler(req: Request, res: Response): Promise<void> {
   try {
@@ -105,7 +111,7 @@ export async function deleteEmployeeHandler(req: Request, res: Response): Promis
   }
 }
 
-// ─── GET /api/employees/:id/audit ────────────────────────────────────────────
+// --- GET /api/employees/:id/audit ---------------------------------------------
 
 export async function getEmployeeAuditLog(req: Request, res: Response): Promise<void> {
   try {
