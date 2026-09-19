@@ -67,20 +67,6 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
   })
 })
 
-// ─── Cron: daily expiry digest at 8:00 AM UAE time ───────────────────────────
-cron.schedule(
-  process.env.NOTIFICATION_CRON ?? '0 8 * * *',
-  async () => {
-    console.log('[cron] Running expiry notification digest...')
-    try {
-      await sendExpiryDigest()
-    } catch (err) {
-      console.error('[cron] Digest failed:', err)
-    }
-  },
-  { timezone: 'Asia/Dubai' }
-)
-
 // ─── Cron: purge expired JWT blocklist entries at midnight ────────────────────
 cron.schedule('0 0 * * *', async () => {
   console.log('[cron] Purging expired tokens...')
