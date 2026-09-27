@@ -27,7 +27,7 @@ function ExpiryBadges({ emp }: { emp: Employee }) {
     if (days < 0) return [{ label, days, state: 'expired' as const }]
     if (days <= 180) return [{ label, days, state: 'expiring' as const }]
     return [{ label, days, state: 'valid' as const }]
-  }).slice(0, 2)
+  }).filter(b => b.state !== 'valid') 
 
   if (badges.length === 0)
     return <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-50 text-green-700">All docs valid</span>
