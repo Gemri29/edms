@@ -158,22 +158,29 @@ export default function EmployeeForm({ employee, onCancel, onSuccess }: {
   }, [basicSalary, housingSalary, transpoAllowance, setValue])
 
   // -- OCR auto-fill ----------------------------------------------------------
+  // Every setValue call here now passes { shouldValidate: true } as the third
+  // argument. Without it, react-hook-form updates the field's *value* but
+  // never re-runs validation on it -- so a stale "Required" error from an
+  // earlier failed submit attempt just sits there even after auto-fill has
+  // correctly populated the field, until the user types a character and
+  // triggers the real onChange handler. This forces immediate re-validation
+  // the moment auto-fill sets each field, clearing any stale error right away.
   const handleOcrResult = (result: OcrResult) => {
-    if (result.firstName) setValue('firstName', result.firstName)
-    if (result.lastName) setValue('lastName', result.lastName)
-    if (result.gender) setValue('gender', result.gender)
-    if (result.birthdate) setValue('birthdate', result.birthdate)
-    if (result.passportNo) setValue('passportNo', result.passportNo.slice(0, 10))
-    if (result.passportExpiry) setValue('passportExpiry', result.passportExpiry)
+    if (result.firstName) setValue('firstName', result.firstName, { shouldValidate: true })
+    if (result.lastName) setValue('lastName', result.lastName, { shouldValidate: true })
+    if (result.gender) setValue('gender', result.gender, { shouldValidate: true })
+    if (result.birthdate) setValue('birthdate', result.birthdate, { shouldValidate: true })
+    if (result.passportNo) setValue('passportNo', result.passportNo.slice(0, 10), { shouldValidate: true })
+    if (result.passportExpiry) setValue('passportExpiry', result.passportExpiry, { shouldValidate: true })
     if (result.eidNo) {
       const masked = maskEid(result.eidNo)
       setEidDisplay(masked)
-      setValue('eidNo', masked)
+      setValue('eidNo', masked, { shouldValidate: true })
     }
-    if (result.eidExpiry) setValue('eidExpiry', result.eidExpiry)
-    if (result.uidNo) setValue('uidNo', result.uidNo.replace(/\D/g, '').slice(0, 15))
-    if (result.laborCardNo) setValue('laborCardNo', result.laborCardNo.replace(/\D/g, '').slice(0, 9))
-    if (result.laborCardExpiry) setValue('laborCardExpiry', result.laborCardExpiry)
+    if (result.eidExpiry) setValue('eidExpiry', result.eidExpiry, { shouldValidate: true })
+    if (result.uidNo) setValue('uidNo', result.uidNo.replace(/\D/g, '').slice(0, 15), { shouldValidate: true })
+    if (result.laborCardNo) setValue('laborCardNo', result.laborCardNo.replace(/\D/g, '').slice(0, 9), { shouldValidate: true })
+    if (result.laborCardExpiry) setValue('laborCardExpiry', result.laborCardExpiry, { shouldValidate: true })
   }
 
   const onSubmit = async (data: FormData) => {

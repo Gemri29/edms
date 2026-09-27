@@ -89,7 +89,7 @@ export async function extractFromImage(
             type: 'image_url',
             image_url: {
               url: `data:${mimeType};base64,${base64Image}`,
-              detail: 'low',
+              detail: 'high',
             },
           },
           {
